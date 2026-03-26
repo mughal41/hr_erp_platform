@@ -1,0 +1,20 @@
+/venv/
+/frontend/node_modules
+/frontend/dist
+# Ignore ALL migration files that start with digits (0001, 0002, 0003, etc.)
+**/migrations/[0-9][0-9][0-9][0-9]_*.py
+**/migrations/[0-9][0-9][0-9][0-9]_*.pyc
+# But keep __init__.py inside migrations folder
+!**/migrations/__init__.py
+# Ignore all __pycache__ folders and compiled Python files
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+# Your existing ignores
+.idea/
+.venv/
+/static/
+db.sqlite3
+*.json
