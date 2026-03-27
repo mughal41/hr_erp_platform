@@ -19,9 +19,9 @@ class EmployeeListSerializer(serializers.ModelSerializer):
 
 class EmployeeDetailSerializer(serializers.ModelSerializer):
     """Full serializer for detail views"""
-    department = serializers.PrimaryKeyRelatedField(read_only=True)
-    job_title = serializers.PrimaryKeyRelatedField(read_only=True)
-    manager = serializers.PrimaryKeyRelatedField(read_only=True)
+    department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), required=False)
+    job_title = serializers.PrimaryKeyRelatedField(queryset=JobTitle.objects.all(), required=False)
+    manager = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = Employee

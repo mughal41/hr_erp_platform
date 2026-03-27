@@ -1,8 +1,19 @@
 from rest_framework import serializers
 from .models import (
     WorkSchedule, EmployeeSchedule, AttendanceRecord,
-    TimeEntry, ShiftPattern, ShiftAssignment, OvertimeRequest
+    TimeEntry, ShiftPattern, ShiftAssignment, OvertimeRequest, AttendanceRequest
 )
+
+# ... existing serializers ...
+
+class AttendanceRequestSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    
+    class Meta:
+        model = AttendanceRequest
+        fields = '__all__'
+        read_only_fields = ['status', 'requested_at', 'manager_approved_at', 'hr_approved_at']
+
 
 class WorkScheduleSerializer(serializers.ModelSerializer):
     class Meta:

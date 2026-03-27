@@ -16,6 +16,7 @@ class LeaveBalanceSerializer(serializers.ModelSerializer):
 
 class LeaveRequestSerializer(serializers.ModelSerializer):
     leave_type_name = serializers.CharField(source='leave_type.name', read_only=True)
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
     
     class Meta:
         model = LeaveRequest

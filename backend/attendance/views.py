@@ -4,12 +4,111 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import (
     WorkSchedule, EmployeeSchedule, AttendanceRecord,
-    TimeEntry, ShiftPattern, ShiftAssignment, OvertimeRequest
+    TimeEntry, ShiftPattern, ShiftAssignment, OvertimeRequest, AttendanceRequest
 )
 from .serializers import (
     WorkScheduleSerializer, EmployeeScheduleSerializer, AttendanceRecordSerializer,
-    TimeEntrySerializer, ShiftPatternSerializer, ShiftAssignmentSerializer, OvertimeRequestSerializer
+    TimeEntrySerializer, ShiftPatternSerializer, ShiftAssignmentSerializer, OvertimeRequestSerializer,
+    AttendanceRequestSerializer
 )
+
+# ... existing ViewSets ...
+
+class AttendanceRequestViewSet(viewsets.ModelViewSet):
+    queryset = AttendanceRequest.objects.all()
+    serializer_class = AttendanceRequestSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if getattr(user, 'is_hr_admin', False) or user.is_superuser:
+            return AttendanceRequest.objects.all()
+            
+        queryset = AttendanceRequest.objects.none()
+        if hasattr(user, 'employee_profile'):
+            # Own requests
+            own_requests = AttendanceRequest.objects.filter(employee=user.employee_profile)
+            # Team requests if manager
+            if getattr(user, 'is_manager', False):
+                team_requests = AttendanceRequest.objects.filter(employee__manager=user.employee_profile)
+                queryset = (own_requests | team_requests).distinct()
+            else:
+                queryset = own_requests
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(
+            employee=self.request.user.employee_profile,
+            status='pending'
+        )
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        req = self.get_object()
+        user = request.user
+        
+        if getattr(user, 'is_manager', False):
+            req.manager_action_at = timezone.now()
+            req.manager = user.employee_profile
+            req.status = 'manager_approved'
+            
+        if getattr(user, 'is_hr_admin', False):
+            req.hr_action_at = timezone.now()
+            req.hr_representative = user.employee_profile
+            req.status = 'approved'
+            
+            # Reconciliation logic
+            from datetime import datetime
+            
+            check_in_dt = datetime.combine(req.date, req.morning_punch)
+            check_out_dt = datetime.combine(req.date, req.leaving_punch)
+            break_start_dt = datetime.combine(req.date, req.break_start_punch)
+            break_end_dt = datetime.combine(req.date, req.break_end_punch)
+            
+            record, created = AttendanceRecord.objects.get_or_create(
+                employee=req.employee,
+                date=req.date
+            )
+            record.check_in = check_in_dt
+            record.check_out = check_out_dt
+            record.is_manual_entry = True
+            record.manual_entry_reason = req.reason
+            record.status = 'present'
+            
+            # Calculate break duration
+            if break_start_dt and break_end_dt:
+                record.break_duration = break_end_dt - break_start_dt
+            
+            record.save()
+            
+            # Create/Update TimeEntry for break
+            TimeEntry.objects.update_or_create(
+                attendance=record,
+                entry_type='break',
+                defaults={
+                    'start_time': break_start_dt,
+                    'end_time': break_end_dt,
+                    'description': 'Manual break entry from attendance request'
+                }
+            )
+            
+            # Recalculate metrics
+            try:
+                record.calculate_metrics()
+                record.save()
+            except Exception:
+                pass
+                
+        req.save()
+        return Response(AttendanceRequestSerializer(req).data)
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        req = self.get_object()
+        req.status = 'rejected'
+        req.save()
+        return Response(AttendanceRequestSerializer(req).data)
+
 
 class WorkScheduleViewSet(viewsets.ModelViewSet):
     queryset = WorkSchedule.objects.all()

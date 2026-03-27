@@ -34,10 +34,19 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if getattr(user, 'is_hr_admin', False) or user.is_superuser:
-            return super().get_queryset()
+            return LeaveRequest.objects.all()
+            
+        queryset = LeaveRequest.objects.none()
         if hasattr(user, 'employee_profile'):
-            return LeaveRequest.objects.filter(employee=user.employee_profile)
-        return LeaveRequest.objects.none()
+            # Own requests
+            own_requests = LeaveRequest.objects.filter(employee=user.employee_profile)
+            # Team requests if manager
+            if getattr(user, 'is_manager', False):
+                team_requests = LeaveRequest.objects.filter(employee__manager=user.employee_profile)
+                queryset = (own_requests | team_requests).distinct()
+            else:
+                queryset = own_requests
+        return queryset
 
     def perform_create(self, serializer):
         serializer.save(

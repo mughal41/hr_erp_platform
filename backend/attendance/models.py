@@ -238,3 +238,45 @@ class OvertimeRequest(models.Model):
     class Meta:
         db_table = 'overtime_requests'
         ordering = ['-requested_at']
+
+
+class AttendanceRequest(models.Model):
+    """Manual attendance correction request workflow"""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('manager_approved', 'Manager Approved'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee = models.ForeignKey('employees.Employee', on_delete=models.CASCADE,
+                                 related_name='attendance_requests')
+    date = models.DateField()
+
+    # The 4 punches requested
+    morning_punch = models.TimeField()
+    break_start_punch = models.TimeField()
+    break_end_punch = models.TimeField()
+    leaving_punch = models.TimeField()
+
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    requested_at = models.DateTimeField(auto_now_add=True)
+
+    # Approval chain
+    manager = models.ForeignKey('employees.Employee', on_delete=models.SET_NULL,
+                                null=True, blank=True, related_name='managed_attendance_requests')
+    manager_action_at = models.DateTimeField(null=True, blank=True)
+    manager_comments = models.TextField(blank=True)
+
+    hr_representative = models.ForeignKey('employees.Employee', on_delete=models.SET_NULL,
+                                          null=True, blank=True, related_name='hr_attendance_requests')
+    hr_action_at = models.DateTimeField(null=True, blank=True)
+    hr_comments = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'attendance_requests'
+        ordering = ['-requested_at']
+        unique_together = ['employee', 'date']

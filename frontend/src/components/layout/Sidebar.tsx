@@ -1,33 +1,26 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Users, 
-  CalendarCheck, 
-  FileSpreadsheet, 
-  Briefcase,
-  CreditCard, 
-  Settings,
-  LogOut,
-  ChevronLeft,
-  ChevronRight
-} from 'lucide-react';
-import { useDispatch } from 'react-redux';
+import { LayoutDashboard, Users, CalendarCheck, FileSpreadsheet, Briefcase, CreditCard, Settings, LogOut, ChevronLeft, ChevronRight, CheckSquare } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../../store/slices/authSlice';
-
-const menuItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-  { icon: Users, label: 'Employees', path: '/employees' },
-  { icon: CalendarCheck, label: 'Attendance', path: '/attendance' },
-  { icon: FileSpreadsheet, label: 'Leave', path: '/leave' },
-  { icon: Briefcase, label: 'Recruitment', path: '/recruitment' },
-  { icon: CreditCard, label: 'Payroll', path: '/payroll' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
-];
 
 const Sidebar: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const dispatch = useDispatch();
+  const { user } = useSelector((state: any) => state.auth);
+
+  const menuItems = [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+    { icon: Users, label: 'Employees', path: '/employees' },
+    { icon: CalendarCheck, label: 'Attendance', path: '/attendance' },
+    { icon: FileSpreadsheet, label: 'Leave', path: '/leave' },
+    ...(user?.is_manager || user?.is_hr_admin ? [{ 
+      icon: CheckSquare, label: 'Approvals', path: '/approvals' 
+    }] : []),
+    { icon: Briefcase, label: 'Recruitment', path: '/recruitment' },
+    { icon: CreditCard, label: 'Payroll', path: '/payroll' },
+    { icon: Settings, label: 'Settings', path: '/settings' },
+  ];
 
   const handleLogout = () => {
     dispatch(logout());

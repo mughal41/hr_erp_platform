@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Calendar, FileText, Send } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+
+
 import Input from '../common/Input';
 import Button from '../common/Button';
 import { leaveService } from '../../services/leave.service';
@@ -11,12 +12,29 @@ interface LeaveFormProps {
 
 const LeaveForm: React.FC<LeaveFormProps> = ({ onSuccess, onCancel }) => {
   const [loading, setLoading] = useState(false);
+  const [leaveTypes, setLeaveTypes] = useState<any[]>([]);
   const [formData, setFormData] = useState({
-    leave_type: 'ANNUAL', // Based on backend LeaveType model
+    leave_type: '',
     start_date: new Date().toISOString().split('T')[0],
     end_date: new Date().toISOString().split('T')[0],
     reason: '',
   });
+
+  useEffect(() => {
+    const fetchLeaveTypes = async () => {
+      try {
+        const response = await leaveService.getLeaveTypes();
+        const types = response.data.results || response.data;
+        setLeaveTypes(types);
+        if (types.length > 0) {
+          setFormData(prev => ({ ...prev, leave_type: types[0].id }));
+        }
+      } catch (error) {
+        console.error('Failed to fetch leave types', error);
+      }
+    };
+    fetchLeaveTypes();
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -50,13 +68,13 @@ const LeaveForm: React.FC<LeaveFormProps> = ({ onSuccess, onCancel }) => {
             name="leave_type" 
             value={formData.leave_type} 
             onChange={handleChange}
+            required
             className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-100 transition-all font-medium text-sm bg-white"
           >
-            <option value="ANNUAL">Annual Leave</option>
-            <option value="SICK">Sick Leave</option>
-            <option value="CASUAL">Casual Leave</option>
-            <option value="MATERNITY">Maternity Leave</option>
-            <option value="WFH">Work From Home</option>
+            <option value="">Select Type</option>
+            {leaveTypes.map(type => (
+              <option key={type.id} value={type.id}>{type.name}</option>
+            ))}
           </select>
         </div>
         

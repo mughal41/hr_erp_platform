@@ -7,8 +7,40 @@ import Input from '../../components/common/Input';
 import Avatar from '../../components/common/Avatar';
 import Badge from '../../components/common/Badge';
 
+import { authService } from '../../services/auth.service';
+
 const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'profile' | 'company' | 'security'>('profile');
+  
+  // Password Change State
+  const [passLoading, setPassLoading] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    old_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordData.new_password !== passwordData.confirm_password) {
+      alert("New passwords do not match!");
+      return;
+    }
+    
+    setPassLoading(true);
+    try {
+      await authService.changePassword({
+        old_password: passwordData.old_password,
+        new_password: passwordData.new_password
+      });
+      alert("Password updated successfully!");
+      setPasswordData({ old_password: '', new_password: '', confirm_password: '' });
+    } catch (error: any) {
+      alert(error.response?.data?.detail || error.response?.data?.old_password?.[0] || "Failed to update password.");
+    } finally {
+      setPassLoading(false);
+    }
+  };
 
   const tabs = [
     { id: 'profile', label: 'My Profile', icon: User },
@@ -127,17 +159,40 @@ const Settings: React.FC = () => {
               </div>
            )}
 
-           {activeTab === 'security' && (
-              <div className="space-y-6">
-                 <Card title="Change Password">
-                    <div className="space-y-6">
-                       <Input label="Current Password" type="password" />
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <Input label="New Password" type="password" />
-                          <Input label="Confirm New Password" type="password" />
-                       </div>
-                    </div>
-                 </Card>
+          {activeTab === 'security' && (
+             <div className="space-y-6">
+                <Card title="Change Password">
+                   <form onSubmit={handlePasswordChange} className="space-y-6">
+                      <Input 
+                        label="Current Password" 
+                        type="password" 
+                        value={passwordData.old_password}
+                        onChange={(e) => setPasswordData({...passwordData, old_password: e.target.value})}
+                        required
+                      />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                         <Input 
+                          label="New Password" 
+                          type="password" 
+                          value={passwordData.new_password}
+                          onChange={(e) => setPasswordData({...passwordData, new_password: e.target.value})}
+                          required
+                         />
+                         <Input 
+                          label="Confirm New Password" 
+                          type="password" 
+                          value={passwordData.confirm_password}
+                          onChange={(e) => setPasswordData({...passwordData, confirm_password: e.target.value})}
+                          required
+                         />
+                      </div>
+                      <div className="flex justify-end">
+                        <Button type="submit" disabled={passLoading}>
+                          {passLoading ? 'Updating...' : 'Update Password'}
+                        </Button>
+                      </div>
+                   </form>
+                </Card>
                  <Card title="Active Sessions">
                     <div className="space-y-4">
                        <div className="p-4 border border-slate-100 rounded-xl flex items-center justify-between">

@@ -6,4 +6,5 @@ export const leaveService = {
   createLeaveRequest: (data: any) => api.post('/leave/requests/', data),
   approveLeaveRequest: (id: string) => api.post(`/leave/requests/${id}/approve/`),
   rejectLeaveRequest: (id: string) => api.post(`/leave/requests/${id}/reject/`),
+  getLeaveTypes: () => api.get('/leave/leave-types/'),
 };

@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
 import Attendance from './pages/Attendance';
 import Leave from './pages/Leave';
+import Approvals from './pages/Approvals';
 import Payroll from './pages/Payroll';
 import Settings from './pages/Settings';
 
@@ -36,6 +37,9 @@ function App() {
         } />
         <Route path="/leave" element={
           <ProtectedRoute><Leave /></ProtectedRoute>
+        } />
+        <Route path="/approvals" element={
+          <ProtectedRoute><Approvals /></ProtectedRoute>
         } />
         <Route path="/payroll" element={
           <ProtectedRoute><Payroll /></ProtectedRoute>

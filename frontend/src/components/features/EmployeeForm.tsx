@@ -1,54 +1,74 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Button from '../common/Button';
 import Input from '../common/Input';
 import { employeeService } from '../../services/employee.service';
 
 interface EmployeeFormProps {
-  onSuccess: () => void;
+  onSuccess: (data?: any) => void;
   onCancel: () => void;
 }
 
 const EmployeeForm: React.FC<EmployeeFormProps> = ({ onSuccess, onCancel }) => {
   const [loading, setLoading] = useState(false);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [jobTitles, setJobTitles] = useState<any[]>([]);
   const [formData, setFormData] = useState({
-    user_data: {
-      email: '',
-      first_name: '',
-      last_name: '',
-      password: 'password123', // Default for new employees
-    },
-    employee_id: `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
-    designation: '',
+    first_name: '',
+    last_name: '',
+    work_email: '',
+    employee_number: `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
     department: '',
+    job_title: '',
     date_of_joining: new Date().toISOString().split('T')[0],
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    const fetchOptions = async () => {
+      try {
+        const [deptRes, jobRes] = await Promise.all([
+          employeeService.getDepartments(),
+          employeeService.getJobTitles()
+        ]);
+        setDepartments(deptRes.data.results || deptRes.data);
+        setJobTitles(jobRes.data.results || jobRes.data);
+        
+        // Set defaults if available
+        if (deptRes.data.results?.[0] || deptRes.data?.[0]) {
+          setFormData(prev => ({ 
+            ...prev, 
+            department: deptRes.data.results?.[0]?.id || deptRes.data?.[0]?.id 
+          }));
+        }
+        if (jobRes.data.results?.[0] || jobRes.data?.[0]) {
+          setFormData(prev => ({ 
+            ...prev, 
+            job_title: jobRes.data.results?.[0]?.id || jobRes.data?.[0]?.id 
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to fetch form options', error);
+      }
+    };
+    fetchOptions();
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    if (name.startsWith('user.')) {
-      const field = name.split('.')[1];
-      setFormData({
-        ...formData,
-        user_data: { ...formData.user_data, [field]: value }
-      });
-    } else {
-      setFormData({ ...formData, [name]: value });
-    }
+    setFormData({ ...formData, [name]: value });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await employeeService.createEmployee({
-        user: formData.user_data,
-        employee_id: formData.employee_id,
-        designation: formData.designation,
-        date_of_joining: formData.date_of_joining,
-      });
-      onSuccess();
+      const result = await employeeService.createEmployee(formData);
+      onSuccess(result.data);
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to create employee. Please check all fields.');
+      console.error('Creation error:', error.response?.data);
+      const errorMsg = typeof error.response?.data === 'object' 
+        ? Object.entries(error.response.data).map(([k, v]) => `${k}: ${v}`).join(', ')
+        : error.response?.data?.detail;
+      alert(errorMsg || 'Failed to create employee. Please check all fields.');
     } finally {
       setLoading(false);
     }
@@ -59,16 +79,16 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ onSuccess, onCancel }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input 
           label="First Name" 
-          name="user.first_name" 
-          value={formData.user_data.first_name} 
+          name="first_name" 
+          value={formData.first_name} 
           onChange={handleChange} 
           required 
           placeholder="e.g. John" 
         />
         <Input 
           label="Last Name" 
-          name="user.last_name" 
-          value={formData.user_data.last_name} 
+          name="last_name" 
+          value={formData.last_name} 
           onChange={handleChange} 
           required 
           placeholder="e.g. Doe" 
@@ -76,9 +96,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ onSuccess, onCancel }) => {
         <div className="sm:col-span-2">
           <Input 
             label="Work Email Address" 
-            name="user.email" 
+            name="work_email" 
             type="email" 
-            value={formData.user_data.email} 
+            value={formData.work_email} 
             onChange={handleChange} 
             required 
             placeholder="johndoe@company.com" 
@@ -86,8 +106,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ onSuccess, onCancel }) => {
         </div>
         <Input 
           label="Employee ID" 
-          name="employee_id" 
-          value={formData.employee_id} 
+          name="employee_number" 
+          value={formData.employee_number} 
           onChange={handleChange} 
           required 
         />
@@ -99,15 +119,37 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ onSuccess, onCancel }) => {
           onChange={handleChange} 
           required 
         />
-        <div className="sm:col-span-2">
-          <Input 
-            label="Designation / Job Title" 
-            name="designation" 
-            value={formData.designation} 
-            onChange={handleChange} 
-            required 
-            placeholder="e.g. Senior Software Engineer" 
-          />
+        
+        <div>
+          <label className="block text-sm font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Department</label>
+          <select 
+            name="department" 
+            value={formData.department} 
+            onChange={handleChange}
+            required
+            className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-100 transition-all font-medium text-sm bg-white"
+          >
+            <option value="">Select Department</option>
+            {departments.map(dept => (
+              <option key={dept.id} value={dept.id}>{dept.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Job Title</label>
+          <select 
+            name="job_title" 
+            value={formData.job_title} 
+            onChange={handleChange}
+            required
+            className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-100 transition-all font-medium text-sm bg-white"
+          >
+            <option value="">Select Designation</option>
+            {jobTitles.map(jt => (
+              <option key={jt.id} value={jt.id}>{jt.title}</option>
+            ))}
+          </select>
         </div>
       </div>
 
