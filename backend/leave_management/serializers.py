@@ -21,7 +21,7 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = LeaveRequest
         fields = '__all__'
-        read_only_fields = ['id', 'status', 'current_approver', 'manager_action_at', 'hr_action_at', 'requested_at', 'updated_at', 'approved_at', 'cancelled_at']
+        read_only_fields = ['id', 'employee', 'status', 'total_days', 'current_approver', 'manager_action_at', 'hr_action_at', 'requested_at', 'updated_at', 'approved_at', 'cancelled_at']
 
 class LeaveCalendarSerializer(serializers.ModelSerializer):
     class Meta:
@@ -32,4 +32,4 @@ class CompOffRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompOffRequest
         fields = '__all__'
-        read_only_fields = ['status', 'approved_by']
+        read_only_fields = ['employee', 'status', 'approved_by']

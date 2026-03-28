@@ -88,5 +88,53 @@ def seed():
         )
         print("Employee profile created for admin.")
 
+    # 6. Create Leave Types and Balances
+    from leave_management.models import LeaveType, LeaveBalance
+    
+    leave_types_data = [
+        {'name': 'Casual Leave', 'code': 'CL', 'annual_quota': 6},
+        {'name': 'Sick Leave', 'code': 'SL', 'annual_quota': 5},
+        {'name': 'Annual Leave', 'code': 'AL', 'annual_quota': 8},
+        {'name': 'Paternity Leave', 'code': 'PL', 'annual_quota': 3},
+        {'name': 'Maternity Leave', 'code': 'ML', 'annual_quota': 30},
+        {'name': 'Pilgrimage Leave', 'code': 'PIL', 'annual_quota': 15},
+    ]
+    
+    employee = user.employee_profile
+    current_year = timezone.now().year
+    
+    for lt_data in leave_types_data:
+        lt, created = LeaveType.objects.get_or_create(
+            code=lt_data['code'],
+            defaults={
+                'name': lt_data['name'],
+                'annual_quota': lt_data['annual_quota'],
+                'is_active': True
+            }
+        )
+        if created:
+            print(f"Leave Type created: {lt.name}")
+        else:
+            # Update quota if already exists to match user request
+            lt.annual_quota = lt_data['annual_quota']
+            lt.save()
+            print(f"Leave Type updated: {lt.name} (Quota: {lt.annual_quota})")
+            
+        # Create/Update balance for employee
+        lb, created = LeaveBalance.objects.get_or_create(
+            employee=employee,
+            leave_type=lt,
+            year=current_year,
+            defaults={
+                'opening_balance': lt_data['annual_quota'],
+            }
+        )
+        if created:
+            print(f"Leave Balance created for {employee.full_name} - {lt.name}")
+        else:
+            lb.opening_balance = lt_data['annual_quota']
+            lb.save()
+            print(f"Leave Balance updated for {employee.full_name} - {lt.name}")
+
 if __name__ == '__main__':
     seed()

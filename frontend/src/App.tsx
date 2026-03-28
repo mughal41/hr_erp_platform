@@ -8,6 +8,7 @@ import Leave from './pages/Leave';
 import Approvals from './pages/Approvals';
 import Payroll from './pages/Payroll';
 import Settings from './pages/Settings';
+import LeaveQuotaSettings from './pages/Settings/LeaveQuotaSettings';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const { isAuthenticated } = useSelector((state: any) => state.auth);
@@ -46,6 +47,9 @@ function App() {
         } />
         <Route path="/settings" element={
           <ProtectedRoute><Settings /></ProtectedRoute>
+        } />
+        <Route path="/settings/leave-quota" element={
+          <ProtectedRoute><LeaveQuotaSettings /></ProtectedRoute>
         } />
 
         {/* Redirects */}

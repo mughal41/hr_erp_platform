@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Calendar, Filter, Plus, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
+// Icons not needed after redesign
 import MainLayout from '../../components/layout/MainLayout';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -12,7 +12,10 @@ const Leave: React.FC = () => {
   const [requests, setRequests] = useState<any[]>([]);
   const [balances, setBalances] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create'|'edit'|'view'|'delete'>('create');
+  const [selectedRequest, setSelectedRequest] = useState<any>(null);
 
   const fetchLeaves = async () => {
     try {
@@ -45,6 +48,28 @@ const Leave: React.FC = () => {
     fetchLeaveData();
   }, []);
 
+  const handleOpenModal = (mode: 'create'|'edit'|'view'|'delete', req: any = null) => {
+     setModalMode(mode);
+     setSelectedRequest(req);
+     setIsModalOpen(true);
+  };
+
+  const executeDelete = async () => {
+    if (!selectedRequest) return;
+    try {
+      await leaveService.deleteLeaveRequest(selectedRequest.id);
+      setIsModalOpen(false);
+      fetchLeaves();
+    } catch (error) {
+      console.error('Failed to delete leave request', error);
+      alert('Cannot delete this leave request.');
+    }
+  };
+
+  const handleDeleteRequest = (req: any) => {
+     handleOpenModal('delete', req);
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'approved': return <Badge variant="success">Approved</Badge>;
@@ -64,45 +89,57 @@ const Leave: React.FC = () => {
         </div>
         <div className="flex gap-3">
           <Button variant="secondary" onClick={() => alert('Feature coming soon!')}>Export</Button>
-          <Button onClick={() => setIsModalOpen(true)}>New Request</Button>
+          <Button onClick={() => handleOpenModal('create')}>New Request</Button>
         </div>
       </div>
 
-      {/* Leave Balance Section */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {loading ? (
-           [1,2,3,4].map(i => <div key={i} className="h-32 bg-slate-100 rounded-xl animate-pulse"></div>)
-        ) : balances.length > 0 ? (
-          balances.map((bal, i) => (
-            <div key={i} className="card-minimal p-6">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{bal.leave_type_name || 'Paid Leave'}</p>
-              <h3 className="text-2xl font-bold text-slate-900">{(bal.total_allocation - bal.used).toFixed(1)} <span className="text-sm font-medium text-slate-400">Days</span></h3>
-              <div className="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                <div 
-                   className="h-full bg-primary-500 transition-all duration-500" 
-                   style={{ width: `${(bal.used / bal.total_allocation) * 100}%` }}
-                ></div>
-              </div>
-              <p className="text-[10px] text-slate-400 mt-2 font-medium">USED: {bal.used} / {bal.total_allocation}</p>
-            </div>
-          ))
-        ) : (
-           <div className="lg:col-span-4 card-minimal p-8 text-center text-slate-400">No leave balances found for current year.</div>
-        )}
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Leave Requests Table */}
-        <Card title="My Requests" className="lg:col-span-2" noPadding>
+        {/* Left Sidebar: Leave Balances */}
+        <div className="space-y-6">
+          <Card title="Leave Allowances">
+            <div className="space-y-6">
+              {loading ? (
+                 [1, 2, 3].map(i => <div key={i} className="h-16 bg-slate-100/50 rounded-xl animate-pulse"></div>)
+              ) : balances.length > 0 ? (
+                balances.map((bal, i) => (
+                  <div key={i} className="flex flex-col">
+                    <div className="flex justify-between items-end mb-2">
+                       <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{bal.leave_type_name || 'Paid Leave'}</span>
+                       <div className="text-right">
+                         <span className="text-lg font-bold text-slate-900">{parseFloat(bal.available).toFixed(1)}</span>
+                         <span className="text-[10px] uppercase font-bold text-slate-400 ml-1 tracking-widest">Left</span>
+                       </div>
+                    </div>
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                         className="h-full bg-primary-500 rounded-full transition-all duration-500" 
+                         style={{ width: `${(parseFloat(bal.used) / parseFloat(bal.opening_balance)) * 100}%` }}
+                      ></div>
+                    </div>
+                    <div className="flex justify-between mt-1.5 text-[10px] text-slate-400 font-bold tracking-wider">
+                       <span>USED {bal.used}</span>
+                       <span>QUOTA {bal.opening_balance}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                 <div className="text-center text-slate-400 py-6 text-sm">No leave balances found for current year.</div>
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {/* Right Content: Leave Requests Table */}
+        <Card title="Leave Requests Workflow" className="lg:col-span-2" noPadding>
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-               <thead>
-                 <tr className="bg-slate-50/50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
-                   <th className="px-6 py-4">Leave Type</th>
-                   <th className="px-6 py-4">Period</th>
-                   <th className="px-6 py-4">Days</th>
-                   <th className="px-6 py-4">Status</th>
-                   <th className="px-6 py-4"></th>
+             <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                   <th className="px-6 py-4 border-b border-slate-100">Leave Type</th>
+                   <th className="px-6 py-4 border-b border-slate-100">Period</th>
+                   <th className="px-6 py-4 border-b border-slate-100">Days</th>
+                   <th className="px-6 py-4 border-b border-slate-100">Status</th>
+                   <th className="px-6 py-4 border-b border-slate-100 text-right">Actions</th>
                  </tr>
                </thead>
                <tbody className="divide-y divide-slate-50">
@@ -115,13 +152,27 @@ const Leave: React.FC = () => {
                       <tr key={i} className="hover:bg-slate-50/30 transition-colors">
                         <td className="px-6 py-4 text-sm font-semibold text-slate-900">{req.leave_type_name || 'Sick Leave'}</td>
                         <td className="px-6 py-4">
-                           <p className="text-sm text-slate-600">{new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</p>
-                           <p className="text-[10px] text-slate-400">{req.start_day_type} - {req.end_day_type}</p>
+                           <p className="text-sm font-semibold text-slate-600">{new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</p>
+                           <p className="text-xs font-medium text-slate-400 mt-0.5">{req.start_day_type} - {req.end_day_type}</p>
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-900 font-bold">{req.total_days}</td>
+                        <td className="px-6 py-4 text-sm text-slate-900 font-bold">{parseFloat(req.total_days).toFixed(1)}</td>
                         <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
                         <td className="px-6 py-4 text-right">
-                           {req.status === 'pending' && <Button variant="ghost" size="sm" className="text-rose-500">Cancel</Button>}
+                           <div className="flex justify-end gap-2 text-slate-400">
+                              <button onClick={() => handleOpenModal('view', req)} className="p-1 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors" title="View details">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                              </button>
+                              {req.status === 'pending' && (
+                                 <>
+                                    <button onClick={() => handleOpenModal('edit', req)} className="p-1 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors" title="Edit request">
+                                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-edit-2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                                    </button>
+                                    <button onClick={() => handleDeleteRequest(req)} className="p-1 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors" title="Delete request">
+                                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                    </button>
+                                 </>
+                              )}
+                           </div>
                         </td>
                       </tr>
                     ))
@@ -130,52 +181,32 @@ const Leave: React.FC = () => {
             </table>
           </div>
         </Card>
-
-        {/* Info Card */}
-        <div className="space-y-6">
-          <Card title="Quick Info">
-            <div className="space-y-4">
-               <div className="flex gap-4">
-                  <div className="p-3 bg-slate-50 rounded-lg shrink-0">
-                    <AlertCircle className="h-5 w-5 text-slate-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Planning a leave?</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Please submit requests at least 3 days in advance for proper planning.</p>
-                  </div>
-               </div>
-               <div className="flex gap-4">
-                  <div className="p-3 bg-slate-50 rounded-lg shrink-0">
-                    <Calendar className="h-5 w-5 text-slate-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Annual Quota</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Your total annual leave quota is reset on January 1st every year.</p>
-                  </div>
-               </div>
-            </div>
-          </Card>
-          
-          <Card className="bg-primary-600 text-white border-none shadow-strong">
-             <h4 className="font-bold text-lg mb-2">Need Help?</h4>
-             <p className="text-sm text-primary-100 mb-6">If you have questions about leave policies or balances, contact HR.</p>
-             <Button variant="secondary" className="w-full bg-white text-primary-600 border-none hover:bg-primary-50">View Policy</Button>
-          </Card>
-        </div>
       </div>
 
       <Modal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)}
-        title="Submit Time Off Request"
+        title={modalMode === 'delete' ? "Confirm Delete" : modalMode === 'view' ? "View Leave Request" : modalMode === 'edit' ? "Edit Leave Request" : "Submit Time Off Request"}
       >
-        <LeaveForm 
-          onSuccess={() => {
-            setIsModalOpen(false);
-            fetchLeaves();
-          }} 
-          onCancel={() => setIsModalOpen(false)} 
-        />
+        {modalMode === 'delete' ? (
+           <div className="space-y-6">
+              <p className="text-slate-600">Are you sure you want to delete this leave request? This action cannot be undone.</p>
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-50">
+                <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+                <Button className="bg-rose-500 hover:bg-rose-600 border-rose-500" onClick={executeDelete}>Delete Request</Button>
+              </div>
+           </div>
+        ) : (
+          <LeaveForm 
+            onSuccess={() => {
+              setIsModalOpen(false);
+              fetchLeaves();
+            }} 
+            onCancel={() => setIsModalOpen(false)} 
+            editData={selectedRequest}
+            isViewOnly={modalMode === 'view'}
+          />
+        )}
       </Modal>
     </MainLayout>
   );

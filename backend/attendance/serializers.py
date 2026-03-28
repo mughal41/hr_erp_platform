@@ -12,7 +12,7 @@ class AttendanceRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttendanceRequest
         fields = '__all__'
-        read_only_fields = ['status', 'requested_at', 'manager_approved_at', 'hr_approved_at']
+        read_only_fields = ['employee', 'status', 'requested_at', 'manager_approved_at', 'hr_approved_at']
 
 
 class WorkScheduleSerializer(serializers.ModelSerializer):
@@ -50,4 +50,4 @@ class OvertimeRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = OvertimeRequest
         fields = '__all__'
-        read_only_fields = ['status', 'requested_at', 'manager_approved_at', 'hr_approved_at']
+        read_only_fields = ['employee', 'status', 'requested_at', 'manager_approved_at', 'hr_approved_at']

@@ -42,6 +42,23 @@ class AttendanceRequestViewSet(viewsets.ModelViewSet):
             status='pending'
         )
 
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = self.get_object()
+        if not getattr(user, 'is_hr_admin', False) and not user.is_superuser:
+            if instance.status != 'pending':
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Cannot edit this request because it is no longer pending.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if not getattr(user, 'is_hr_admin', False) and not user.is_superuser:
+            if instance.status != 'pending':
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Cannot delete this request because it is no longer pending.")
+        instance.delete()
+
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         req = self.get_object()
@@ -60,37 +77,49 @@ class AttendanceRequestViewSet(viewsets.ModelViewSet):
             # Reconciliation logic
             from datetime import datetime
             
-            check_in_dt = datetime.combine(req.date, req.morning_punch)
-            check_out_dt = datetime.combine(req.date, req.leaving_punch)
-            break_start_dt = datetime.combine(req.date, req.break_start_punch)
-            break_end_dt = datetime.combine(req.date, req.break_end_punch)
-            
             record, created = AttendanceRecord.objects.get_or_create(
                 employee=req.employee,
                 date=req.date
             )
-            record.check_in = check_in_dt
-            record.check_out = check_out_dt
-            record.is_manual_entry = True
-            record.manual_entry_reason = req.reason
-            record.status = 'present'
             
-            # Calculate break duration
-            if break_start_dt and break_end_dt:
-                record.break_duration = break_end_dt - break_start_dt
+            if req.morning_punch is not None:
+                record.check_in = datetime.combine(req.date, req.morning_punch)
+            if req.leaving_punch is not None:
+                record.check_out = datetime.combine(req.date, req.leaving_punch)
+                
+            record.is_manual_entry = True
+            if req.reason:
+                if record.manual_entry_reason:
+                    record.manual_entry_reason += "\\n" + req.reason
+                else:
+                    record.manual_entry_reason = req.reason
+                    
+            if record.status in ['absent', 'pending', '']:
+                record.status = 'present'
+            
+            # Extract break updates
+            b_start = datetime.combine(req.date, req.break_start_punch) if req.break_start_punch is not None else None
+            b_end = datetime.combine(req.date, req.break_end_punch) if req.break_end_punch is not None else None
+            
+            if b_start or b_end:
+                time_entry, _ = TimeEntry.objects.get_or_create(
+                    attendance=record,
+                    entry_type='break',
+                    defaults={
+                        'start_time': b_start or timezone.now(),
+                        'description': 'Manual break entry from attendance request'
+                    }
+                )
+                if b_start is not None:
+                    time_entry.start_time = b_start
+                if b_end is not None:
+                    time_entry.end_time = b_end
+                time_entry.save()
+                
+                if time_entry.start_time and time_entry.end_time:
+                    record.break_duration = time_entry.end_time - time_entry.start_time
             
             record.save()
-            
-            # Create/Update TimeEntry for break
-            TimeEntry.objects.update_or_create(
-                attendance=record,
-                entry_type='break',
-                defaults={
-                    'start_time': break_start_dt,
-                    'end_time': break_end_dt,
-                    'description': 'Manual break entry from attendance request'
-                }
-            )
             
             # Recalculate metrics
             try:
@@ -132,6 +161,41 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
         if hasattr(user, 'employee_profile'):
             return AttendanceRecord.objects.filter(employee=user.employee_profile)
         return AttendanceRecord.objects.none()
+
+    @action(detail=False, methods=['get'], url_path='by-date')
+    def by_date(self, request):
+        date_str = request.query_params.get('date')
+        if not date_str:
+            return Response({'error': 'date parameter is required'}, status=400)
+            
+        if not hasattr(request.user, 'employee_profile'):
+            return Response({'error': 'No employee profile linked'}, status=400)
+            
+        employee = request.user.employee_profile
+        try:
+            record = AttendanceRecord.objects.get(employee=employee, date=date_str)
+            
+            breaks = TimeEntry.objects.filter(attendance=record, entry_type='break').order_by('start_time')
+            break_start = None
+            break_end = None
+            if breaks.exists():
+                b = breaks.first()
+                break_start = b.start_time.strftime('%H:%M') if b.start_time else None
+                break_end = b.end_time.strftime('%H:%M') if b.end_time else None
+                
+            return Response({
+                'morning_punch': record.check_in.strftime('%H:%M') if record.check_in else None,
+                'break_start_punch': break_start,
+                'break_end_punch': break_end,
+                'leaving_punch': record.check_out.strftime('%H:%M') if record.check_out else None,
+            })
+        except AttendanceRecord.DoesNotExist:
+            return Response({
+                'morning_punch': None,
+                'break_start_punch': None,
+                'break_end_punch': None,
+                'leaving_punch': None,
+            })
 
     @action(detail=False, methods=['post'])
     def clock_in(self, request):

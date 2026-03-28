@@ -98,8 +98,9 @@ class LeaveRequest(models.Model):
 
     DAY_CHOICES = [
         ('full', 'Full Day'),
-        ('first_half', 'First Half'),
-        ('second_half', 'Second Half'),
+        ('half', 'Half Day'),
+        ('three_quarter', 'Three Quarter Day (75%)'),
+        ('short', 'Short Leave (25%)'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -120,6 +121,7 @@ class LeaveRequest(models.Model):
     reason = models.TextField()
     contact_during_leave = models.CharField(max_length=100, blank=True)
     is_emergency = models.BooleanField(default=False)
+    selected_quarters = models.JSONField(default=list, blank=True, help_text='Selected 2-hour slots for partial leave (Q1, Q2, Q3, Q4)')
 
     # Workflow
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
@@ -161,44 +163,88 @@ class LeaveRequest(models.Model):
         if self.end_date < self.start_date:
             raise ValidationError("End date cannot be before start date")
 
-        # Check balance
-        if self.status == 'pending' and self.pk:
-            balance = LeaveBalance.objects.get(
-                employee=self.employee,
-                leave_type=self.leave_type,
-                year=self.start_date.year
-            )
-            if balance.available < self.total_days:
-                raise ValidationError(f"Insufficient leave balance. Available: {balance.available}")
+        # Force calculation of total days if not set
+        if not self.total_days:
+            self.calculate_total_days()
+
+        # Check balance - only if trying to submit/approve
+        if self.status not in ['draft', 'cancelled', 'withdrawn', 'rejected']:
+            try:
+                balance = LeaveBalance.objects.get(
+                    employee=self.employee,
+                    leave_type=self.leave_type,
+                    year=self.start_date.year
+                )
+                if balance.available < self.total_days:
+                    raise ValidationError(f"Insufficient leave balance. Available: {balance.available}, Requested: {self.total_days}")
+            except LeaveBalance.DoesNotExist:
+                raise ValidationError("No leave balance record found for this employee, year and leave type.")
 
     def calculate_total_days(self):
         """Calculate actual working days excluding weekends and holidays"""
         if not self.start_date or not self.end_date:
             return 0
             
+        weights = {
+            'full': 1.0,
+            'half': 0.5,
+            'three_quarter': 0.75,
+            'short': 0.25,
+        }
+        
         days = 0
         curr = self.start_date
         while curr <= self.end_date:
-            # Check if it is a weekend (Saturday=5, Sunday=6)
-            if curr.weekday() < 5:
-                # Add day weight
-                weight = 1.0
-                if curr == self.start_date and self.start_day_type != 'full':
-                    weight = 0.5
-                elif curr == self.end_date and self.end_day_type != 'full':
-                    weight = 0.5
-                
-                # Special case: single day 1st half + 2nd half on same day (handled by weight logic)
-                days += weight
+            weight = 1.0
+            if curr == self.start_date:
+                weight = weights.get(self.start_day_type, 1.0)
+            elif curr == self.end_date:
+                weight = weights.get(self.end_day_type, 1.0)
+            
+            days = float(days) + float(weight)
             curr += timedelta(days=1)
         
-        self.total_days = days
-        return days
+        from decimal import Decimal
+        self.total_days = Decimal(str(days))
+        return self.total_days
 
     def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        old_status = None
+        if not is_new:
+            try:
+                old_instance = LeaveRequest.objects.get(pk=self.pk)
+                old_status = old_instance.status
+            except LeaveRequest.DoesNotExist:
+                pass
+        
         if not self.total_days:
             self.calculate_total_days()
+            
         super().save(*args, **kwargs)
+        
+        # Handle LeaveBalance deduction when approved
+        if self.status == 'approved' and old_status != 'approved':
+            balance, _ = LeaveBalance.objects.get_or_create(
+                employee=self.employee,
+                leave_type=self.leave_type,
+                year=self.start_date.year,
+                defaults={'opening_balance': self.leave_type.annual_quota}
+            )
+            balance.used = float(balance.used) + float(self.total_days)
+            balance.save()
+        # Handle deduction reversal if no longer approved
+        elif old_status == 'approved' and self.status != 'approved':
+            try:
+                balance = LeaveBalance.objects.get(
+                    employee=self.employee,
+                    leave_type=self.leave_type,
+                    year=self.start_date.year
+                )
+                balance.used = max(0, float(balance.used) - float(self.total_days))
+                balance.save()
+            except LeaveBalance.DoesNotExist:
+                pass
 
 
 class LeaveCalendar(models.Model):

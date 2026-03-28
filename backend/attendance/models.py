@@ -129,30 +129,39 @@ class AttendanceRecord(models.Model):
 
     def calculate_metrics(self):
         """Calculate worked hours, overtime, etc."""
+        if not hasattr(self.employee, 'schedule'):
+            return
+            
+        schedule = self.employee.schedule.work_schedule
+        scheduled_start = datetime.combine(self.date, schedule.start_time)
+        scheduled_end = datetime.combine(self.date, schedule.end_time)
+
+        if self.check_in:
+            if self.check_in > scheduled_start + schedule.late_grace_period:
+                self.late_by = self.check_in - scheduled_start
+                self.status = 'late'
+            else:
+                self.late_by = timedelta(0)
+                if self.status in ['absent', 'pending', '']:
+                    self.status = 'present'
+
         if self.check_in and self.check_out:
             total = self.check_out - self.check_in
             self.total_worked = total - self.break_duration
 
-            schedule = self.employee.schedule.work_schedule
             expected_duration = schedule.work_duration
 
             if self.total_worked > expected_duration + timedelta(minutes=30):
                 self.overtime = self.total_worked - expected_duration
 
-            # Check late/early
-            scheduled_start = datetime.combine(self.date, schedule.start_time)
-            if self.check_in > scheduled_start + schedule.late_grace_period:
-                self.late_by = self.check_in - scheduled_start
-                self.status = 'late'
-
-            scheduled_end = datetime.combine(self.date, schedule.end_time)
             if self.check_out < scheduled_end - schedule.early_leave_grace_period:
                 self.early_leave_by = scheduled_end - self.check_out
                 if self.status == 'late':
                     self.status = 'half_day'
                 else:
                     self.status = 'early_leave'
-
+            else:
+                self.early_leave_by = timedelta(0)
 
 class TimeEntry(models.Model):
     """Detailed time entries for breaks, tasks, etc."""
@@ -255,11 +264,11 @@ class AttendanceRequest(models.Model):
                                  related_name='attendance_requests')
     date = models.DateField()
 
-    # The 4 punches requested
-    morning_punch = models.TimeField()
-    break_start_punch = models.TimeField()
-    break_end_punch = models.TimeField()
-    leaving_punch = models.TimeField()
+    # The 4 punches requested (all optional for partial updates)
+    morning_punch = models.TimeField(null=True, blank=True)
+    break_start_punch = models.TimeField(null=True, blank=True)
+    break_end_punch = models.TimeField(null=True, blank=True)
+    leaving_punch = models.TimeField(null=True, blank=True)
 
     reason = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
@@ -279,4 +288,3 @@ class AttendanceRequest(models.Model):
     class Meta:
         db_table = 'attendance_requests'
         ordering = ['-requested_at']
-        unique_together = ['employee', 'date']

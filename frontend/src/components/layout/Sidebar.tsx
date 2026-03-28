@@ -19,6 +19,9 @@ const Sidebar: React.FC = () => {
     }] : []),
     { icon: Briefcase, label: 'Recruitment', path: '/recruitment' },
     { icon: CreditCard, label: 'Payroll', path: '/payroll' },
+    ...(user?.is_hr_admin ? [{ 
+      icon: FileSpreadsheet, label: 'Leave Quotas', path: '/settings/leave-quota' 
+    }] : []),
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 

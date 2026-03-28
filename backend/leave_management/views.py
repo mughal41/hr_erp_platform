@@ -13,6 +13,34 @@ class LeaveTypeViewSet(viewsets.ModelViewSet):
     serializer_class = LeaveTypeSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    @action(detail=True, methods=['post'], url_path='bulk-update-quota')
+    def bulk_update_quota(self, request, pk=None):
+        if not getattr(request.user, 'is_hr_admin', False) and not request.user.is_superuser:
+            return Response({'error': 'Only HR Admins can update quotas.'}, status=403)
+            
+        leave_type = self.get_object()
+        new_quota = request.data.get('annual_quota')
+        
+        if new_quota is None:
+            return Response({'error': 'annual_quota is required'}, status=400)
+            
+        # Update LeaveType
+        leave_type.annual_quota = new_quota
+        leave_type.save()
+        
+        # Update all balances for the current year
+        current_year = timezone.now().year
+        balances = LeaveBalance.objects.filter(leave_type=leave_type, year=current_year)
+        
+        for balance in balances:
+            balance.opening_balance = new_quota
+            balance.save()
+            
+        return Response({
+            'message': f'Updated quota for {leave_type.name} and {balances.count()} employee balances.',
+            'annual_quota': new_quota
+        })
+
 class LeaveBalanceViewSet(viewsets.ModelViewSet):
     queryset = LeaveBalance.objects.all()
     serializer_class = LeaveBalanceSerializer
@@ -54,6 +82,23 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
             status='pending'
         )
 
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = self.get_object()
+        if not getattr(user, 'is_hr_admin', False) and not user.is_superuser:
+            if instance.status != 'pending':
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Cannot edit this request because it is no longer pending.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if not getattr(user, 'is_hr_admin', False) and not user.is_superuser:
+            if instance.status != 'pending':
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Cannot delete this request because it is no longer pending.")
+        instance.delete()
+
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         req = self.get_object()
@@ -71,16 +116,7 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
             req.approved_at = timezone.now()
             
             # Deduct balance
-            try:
-                balance = LeaveBalance.objects.get(
-                    employee=req.employee,
-                    leave_type=req.leave_type,
-                    year=req.start_date.year
-                )
-                balance.used += req.total_days
-                balance.save()
-            except LeaveBalance.DoesNotExist:
-                pass
+            # Deduct balance is now handled by the model's save() method
                 
         req.save()
         return Response(LeaveRequestSerializer(req).data)

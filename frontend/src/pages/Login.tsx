@@ -26,7 +26,13 @@ const Login = () => {
 
             localStorage.setItem('access_token', access);
             localStorage.setItem('refresh_token', refresh);
-            dispatch(loginSuccess({ user: { email }, token: access }));
+            
+            // Set authorization header for the immediate next request
+            api.defaults.headers.common['Authorization'] = `Bearer ${access}`;
+            
+            // Fetch user info
+            const userResponse = await api.get('/auth/users/me/');
+            dispatch(loginSuccess({ user: userResponse.data, token: access }));
 
             navigate('/dashboard');
         } catch (err: any) {
